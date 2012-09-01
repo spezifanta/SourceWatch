@@ -32,7 +32,7 @@
 #       not implemented yet because I couldn't find a server that does this.
 
 import socket
-import StringIO
+import io
 import struct
 import time
 
@@ -51,7 +51,7 @@ CHALLENGE = -1
 S2C_CHALLENGE = ord('A')
 
 
-class SourceQueryPacket(StringIO.StringIO):
+class SourceQueryPacket(io.BytesIO):
     def putByte(self, value):
         self.write(struct.pack('<B', value))
 
@@ -80,15 +80,17 @@ class SourceQueryPacket(StringIO.StringIO):
         return struct.unpack('<f', self.read(4))[0]
 
     def putString(self, value):
-        self.write('{0}\x00'.format(value))
+        self.write(bytearray('{0}\x00'.format(value), 'utf-8'))
 
     def getString(self):
-        full_value = self.getvalue()
-        start = self.tell()
-        end = full_value.index('\0', start)
-        value = full_value[start:end]
-        self.seek(end + 1)
-        return value
+        value = []
+        while True:
+            char = self.read(1)
+            if char == b'\x00':
+                break
+            else:
+                value.append(char)
+        return ''.join(map(lambda c: chr(ord(c)), value))
 
 
 class SourceQueryError(Exception):
@@ -139,7 +141,7 @@ class SourceQuery(object):
             total = packet.getByte()
             num = packet.getByte()
             splitsize = packet.getShort()
-            result = [0 for x in xrange(total)]
+            result = [0 for x in range(total)]
             result[num] = packet.read()
 
             # fetch all remaining splits
@@ -257,7 +259,7 @@ class SourceQuery(object):
 
             # TF2 32player servers may send an incomplete reply
             try:
-                for x in xrange(numplayers):
+                for x in range(numplayers):
                     player = {
                         'index': packet.getByte(),
                         'name': packet.getString(),
