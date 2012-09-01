@@ -28,57 +28,44 @@
 
 # TODO:  code cleanup
 
-# TODO:  according to spec, packets may be bzip2 compressed.
-# TODO:: not implemented yet because I couldn't find a server that does this.
+# TODO: according to spec, packets may be bzip2 compressed.
+#       not implemented yet because I couldn't find a server that does this.
 
-import socket, struct, sys, time
+import socket
 import StringIO
+import struct
+import time
 
-PACKETSIZE=1400
+PACKET_SIZE = 1400
+WHOLE = -1
+SPLIT = -2
 
-WHOLE=-1
-SPLIT=-2
-
-# REMOVED.  DEPRECATED QUERY!
-
-# A2A_PING
-# A2A_PING = ord('i')
-# A2A_PING_REPLY = ord('j')
-# A2A_PING_REPLY_STRING = '00000000000000'
-
-# A2S_INFO
 A2S_INFO = ord('T')
 A2S_INFO_STRING = 'Source Engine Query'
 A2S_INFO_REPLY = ord('I')
-
-# A2S_PLAYER
 A2S_PLAYER = ord('U')
 A2S_PLAYER_REPLY = ord('D')
-
-# A2S_RULES
 A2S_RULES = ord('V')
 A2S_RULES_REPLY = ord('E')
-
-# S2C_CHALLENGE
 CHALLENGE = -1
 S2C_CHALLENGE = ord('A')
 
+
 class SourceQueryPacket(StringIO.StringIO):
-    # putting and getting values
-    def putByte(self, val):
-        self.write(struct.pack('<B', val))
+    def putByte(self, value):
+        self.write(struct.pack('<B', value))
 
     def getByte(self):
         return struct.unpack('<B', self.read(1))[0]
 
-    def putShort(self, val):
-        self.write(struct.pack('<h', val))
+    def putShort(self, value):
+        self.write(struct.pack('<h', value))
 
     def getShort(self):
         return struct.unpack('<h', self.read(2))[0]
 
-    def putLong(self, val):
-        self.write(struct.pack('<l', val))
+    def putLong(self, value):
+        self.write(struct.pack('<l', value))
 
     def getLong(self):
         return struct.unpack('<l', self.read(4))[0]
@@ -86,35 +73,38 @@ class SourceQueryPacket(StringIO.StringIO):
     def getLongLong(self):
         return struct.unpack('<Q', self.read(8))[0]
 
-    def putFloat(self, val):
-        self.write(struct.pack('<f', val))
+    def putFloat(self, value):
+        self.write(struct.pack('<f', value))
 
     def getFloat(self):
         return struct.unpack('<f', self.read(4))[0]
 
-    def putString(self, val):
-        self.write(val + '\x00')
+    def putString(self, value):
+        self.write('{0}\x00'.format(value))
 
     def getString(self):
-        val = self.getvalue()
+        full_value = self.getvalue()
         start = self.tell()
-        end = val.index('\0', start)
-        val = val[start:end]
-        self.seek(end+1)
-        return val
+        end = full_value.index('\0', start)
+        value = full_value[start:end]
+        self.seek(end + 1)
+        return value
+
 
 class SourceQueryError(Exception):
     pass
 
-class SourceQuery(object):
-    """Example usage:
 
-       import SourceQuery
-       server = SourceQuery.SourceQuery('1.2.3.4', 27015)
-       print server.ping()
-       print server.info()
-       print server.player()
-       print server.rules()
+class SourceQuery(object):
+    """
+    Example usage:
+
+    import SourceQuery
+    server = SourceQuery.SourceQuery('1.2.3.4', 27015)
+    print server.ping()
+    print server.info()
+    print server.player()
+    print server.rules()
     """
 
     def __init__(self, host, port=27015, timeout=1.0):
@@ -138,45 +128,40 @@ class SourceQuery(object):
             return self.challenge()
 
     def receive(self):
-        packet = SourceQueryPacket(self.udp.recv(PACKETSIZE))
-        typ = packet.getLong()
+        packet = SourceQueryPacket(self.udp.recv(PACKET_SIZE))
+        packet_type = packet.getLong()
 
-        if typ == WHOLE:
+        if packet_type == WHOLE:
             return packet
-
-        elif typ == SPLIT:
+        elif packet_type == SPLIT:
             # handle split packets
             reqid = packet.getLong()
             total = packet.getByte()
             num = packet.getByte()
             splitsize = packet.getShort()
             result = [0 for x in xrange(total)]
-
             result[num] = packet.read()
 
             # fetch all remaining splits
             while 0 in result:
-                packet = SourceQueryPacket(self.udp.recv(PACKETSIZE))
+                packet = SourceQueryPacket(self.udp.recv(PACKET_SIZE))
 
                 if packet.getLong() == SPLIT and packet.getLong() == reqid:
                     total = packet.getByte()
                     num = packet.getByte()
                     splitsize = packet.getShort()
                     result[num] = packet.read()
-
                 else:
                     raise SourceQueryError('Invalid split packet')
 
-            packet = SourceQueryPacket("".join(result))
+            packet = SourceQueryPacket(''.join(result))
 
             if packet.getLong() == WHOLE:
                 return packet
-
             else:
                 raise SourceQueryError('Invalid split packet')
-
         else:
-            raise SourceQueryError("Received invalid packet type %d" % (typ,))
+            raise SourceQueryError('Received invalid packet type {0}'.format(packet_type))
 
     def challenge(self):
         # use A2S_PLAYER to obtain a challenge
@@ -206,32 +191,29 @@ class SourceQuery(object):
         packet.putByte(A2S_INFO)
         packet.putString(A2S_INFO_STRING)
 
-        before = time.time()
-
+        timer_start = time.time()
         self.udp.send(packet.getvalue())
         packet = self.receive()
-
-        after = time.time()
+        timer_end = time.time()
 
         if packet.getByte() == A2S_INFO_REPLY:
-            result = {}
-
-            result['ping'] = after - before
-
-            result['network_version'] = packet.getByte()
-            result['hostname'] = packet.getString()
-            result['map'] = packet.getString()
-            result['gamedir'] = packet.getString()
-            result['gamedesc'] = packet.getString()
-            result['appid'] = packet.getShort()
-            result['numplayers'] = packet.getByte()
-            result['maxplayers'] = packet.getByte()
-            result['numbots'] = packet.getByte()
-            result['dedicated'] = chr(packet.getByte())
-            result['os'] = chr(packet.getByte())
-            result['passworded'] = packet.getByte()
-            result['secure'] = packet.getByte()
-            result['version'] = packet.getString()
+            result = {
+                'ping': timer_end - timer_start,
+                'network_version': packet.getByte(),
+                'hostname': packet.getString(),
+                'map': packet.getString(),
+                'gamedir': packet.getString(),
+                'gamedesc': packet.getString(),
+                'appid': packet.getShort(),
+                'numplayers':  packet.getByte(),
+                'maxplayers': packet.getByte(),
+                'numbots': packet.getByte(),
+                'dedicated': chr(packet.getByte()),
+                'os': chr(packet.getByte()),
+                'passworded': packet.getByte(),
+                'secure': packet.getByte(),
+                'version': packet.getString()
+            }
 
             # edf may or may not be present
             # contents undefined (see wiki page)
@@ -239,7 +221,9 @@ class SourceQuery(object):
             try:
                 edf = packet.getByte()
                 result['edf'] = edf
-
+            except:
+                pass
+            else:
                 if edf & 0x80:
                     result['port'] = packet.getShort()
                 if edf & 0x10:
@@ -249,10 +233,9 @@ class SourceQuery(object):
                     result['specname'] = packet.getString()
                 if edf & 0x20:
                     result['tag'] = packet.getString()
-            except:
-                # let's just ignore all errors...
-                pass
-
+                if edf & 0x01:
+                    result['game_id'] = packet.getLongLong()
+                    
             return result
 
     def player(self):
@@ -270,19 +253,18 @@ class SourceQuery(object):
         # this is our player info
         if packet.getByte() == A2S_PLAYER_REPLY:
             numplayers = packet.getByte()
-
             result = []
 
             # TF2 32player servers may send an incomplete reply
             try:
                 for x in xrange(numplayers):
-                    player = {}
-                    player['index'] = packet.getByte()
-                    player['name'] = packet.getString()
-                    player['kills'] = packet.getLong()
-                    player['time'] = packet.getFloat()
+                    player = {
+                        'index': packet.getByte(),
+                        'name': packet.getString(),
+                        'kills': packet.getLong(),
+                        'time': packet.getFloat()
+                    }
                     result.append(player)
-
             except:
                 pass
 
