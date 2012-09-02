@@ -26,8 +26,6 @@
 
 """http://developer.valvesoftware.com/wiki/Server_Queries"""
 
-# TODO:  code cleanup
-
 # TODO: according to spec, packets may be bzip2 compressed.
 #       not implemented yet because I couldn't find a server that does this.
 
@@ -37,8 +35,8 @@ import struct
 import time
 
 PACKET_SIZE = 1400
-WHOLE = -1
-SPLIT = -2
+PACKET_HEAD = -1
+PACKET_SPLIT = -2
 
 A2S_INFO = ord('T')
 A2S_INFO_STRING = 'Source Engine Query'
@@ -47,7 +45,7 @@ A2S_PLAYER = ord('U')
 A2S_PLAYER_REPLY = ord('D')
 A2S_RULES = ord('V')
 A2S_RULES_REPLY = ord('E')
-CHALLENGE = -1
+EMPTY_CHALLENGE = -1
 S2C_CHALLENGE = ord('A')
 
 
@@ -93,11 +91,32 @@ class SourceQueryPacket(io.BytesIO):
         return ''.join(map(lambda c: chr(ord(c)), value))
 
 
-class SourceQueryError(Exception):
-    pass
+class PacketType:
+    Info, Challenge, Players, Rules = range(4)
 
 
-class SourceQuery(object):
+class PacketFactory:
+    def create(packet_type):
+        packet = SourceQueryPacket()
+        packet.putLong(PACKET_HEAD)
+
+        if packet_type == PacketType.Info:
+            packet.putByte(A2S_INFO)
+            packet.putString(A2S_INFO_STRING)
+        elif packet_type == PacketType.Challenge:
+            packet.putByte(A2S_PLAYER)
+            packet.putLong(PACKET_HEAD)
+        elif packet_type == PacketType.Players:
+            packet.putByte(A2S_PLAYER)
+        elif packet_type == PacketType.Rules:
+            packet.putByte(A2S_RULES)
+        else:
+            return None
+
+        return packet
+
+
+class SourceQuery:
     """
     Example usage:
 
@@ -105,97 +124,73 @@ class SourceQuery(object):
     server = SourceQuery.SourceQuery('1.2.3.4', 27015)
     print server.ping()
     print server.info()
-    print server.player()
+    print server.players()
     print server.rules()
     """
 
     def __init__(self, host, port=27015, timeout=1.0):
-        self.host = host
-        self.port = port
+        self.server = (host, port)
         self.timeout = timeout
-        self.udp = False
+        self.challenge = EMPTY_CHALLENGE
+        self.connect()
 
-    def disconnect(self):
-        if self.udp:
-            self.udp.close()
-            self.udp = False
+    def __del__(self):
+        self.udp.close()
 
-    def connect(self, challenge=False):
-        self.disconnect()
+    def connect(self):
         self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp.settimeout(self.timeout)
-        self.udp.connect((self.host, self.port))
+        self.udp.connect(self.server)
 
+    def query(self, packet, challenge=False):
         if challenge:
-            return self.challenge()
+            packet.putLong(self.get_challenge())
 
-    def receive(self):
+        self.udp.send(packet.getvalue())
+        return self.receive()
+
+    def receive(self, packet_buffer={}):
         packet = SourceQueryPacket(self.udp.recv(PACKET_SIZE))
         packet_type = packet.getLong()
 
-        if packet_type == WHOLE:
+        if packet_type == PACKET_HEAD:
             return packet
-        elif packet_type == SPLIT:
-            # handle split packets
-            reqid = packet.getLong()
-            total = packet.getByte()
-            num = packet.getByte()
-            splitsize = packet.getShort()
-            result = [0 for x in range(total)]
-            result[num] = packet.read()
 
-            # fetch all remaining splits
-            while 0 in result:
-                packet = SourceQueryPacket(self.udp.recv(PACKET_SIZE))
+        elif packet_type == PACKET_SPLIT:
+            request_id = packet.getLong() # compressed?
 
-                if packet.getLong() == SPLIT and packet.getLong() == reqid:
-                    total = packet.getByte()
-                    num = packet.getByte()
-                    splitsize = packet.getShort()
-                    result[num] = packet.read()
-                else:
-                    raise SourceQueryError('Invalid split packet')
+            if request_id not in packet_buffer:
+                packet_buffer.setdefault(request_id, [])
 
-            packet = SourceQueryPacket(''.join(result))
+            total_packets = packet.getByte()
+            current_packet_number = packet.getByte()
+            paket_size = packet.getShort()
+            packet_buffer[request_id].insert(current_packet_number, packet.read())
 
-            if packet.getLong() == WHOLE:
-                return packet
+            if current_packet_number == total_packets - 1:
+                full_packet = SourceQueryPacket(b''.join(packet_buffer[request_id]))
+
+                if full_packet.getLong() == PACKET_HEAD:
+                    return full_packet
             else:
-                raise SourceQueryError('Invalid split packet')
-        else:
-            raise SourceQueryError('Received invalid packet type {0}'.format(packet_type))
+                return self.receive(packet_buffer)
 
-    def challenge(self):
-        # use A2S_PLAYER to obtain a challenge
-        packet = SourceQueryPacket()
-        packet.putLong(WHOLE)
-        packet.putByte(A2S_PLAYER)
-        packet.putLong(CHALLENGE)
+    def get_challenge(self):
+        if self.challenge != EMPTY_CHALLENGE:
+            return self.challenge
 
-        self.udp.send(packet.getvalue())
-        packet = self.receive()
+        packet = self.query(PacketFactory.create(PacketType.Challenge))
 
-        # this is our challenge packet
         if packet.getByte() == S2C_CHALLENGE:
-            challenge = packet.getLong()
-            return challenge
+            self.challenge = packet.getLong()
+            return self.challenge
 
     def ping(self):
-        """Deprecated. Use info()['ping'] instead."""
         return self.info()['ping']
 
     def info(self):
-        """Return a dict with server info and ping."""
-        self.connect()
-
-        packet = SourceQueryPacket()
-        packet.putLong(WHOLE)
-        packet.putByte(A2S_INFO)
-        packet.putString(A2S_INFO_STRING)
-
         timer_start = time.time()
-        self.udp.send(packet.getvalue())
-        packet = self.receive()
+        packet = self.query(PacketFactory.create(PacketType.Info))
         timer_end = time.time()
 
         if packet.getByte() == A2S_INFO_REPLY:
@@ -217,9 +212,6 @@ class SourceQuery(object):
                 'version': packet.getString()
             }
 
-            # edf may or may not be present
-            # contents undefined (see wiki page)
-            # this protocol is horrible
             try:
                 edf = packet.getByte()
                 result['edf'] = edf
@@ -237,64 +229,35 @@ class SourceQuery(object):
                     result['tag'] = packet.getString()
                 if edf & 0x01:
                     result['game_id'] = packet.getLongLong()
-                    
-            return result
+            finally:
+                return result
 
-    def player(self):
-        challenge = self.connect(True)
+    def players(self):
+        packet = self.query(PacketFactory.create(PacketType.Players), True)
 
-        # now obtain the actual player info
-        packet = SourceQueryPacket()
-        packet.putLong(WHOLE)
-        packet.putByte(A2S_PLAYER)
-        packet.putLong(challenge)
-
-        self.udp.send(packet.getvalue())
-        packet = self.receive()
-
-        # this is our player info
         if packet.getByte() == A2S_PLAYER_REPLY:
-            numplayers = packet.getByte()
-            result = []
+            total_players = packet.getByte()
+            player_list = []
 
-            # TF2 32player servers may send an incomplete reply
-            try:
-                for x in range(numplayers):
-                    player = {
-                        'index': packet.getByte(),
-                        'name': packet.getString(),
-                        'kills': packet.getLong(),
-                        'time': packet.getFloat()
-                    }
-                    result.append(player)
-            except:
-                pass
+            for i in range(total_players):
+                player = {
+                    'index': packet.getByte(),
+                    'name': packet.getString(),
+                    'kills': packet.getLong(),
+                    'time': packet.getFloat()
+                }
+                player_list.append(player)
 
-            return result
+            return player_list
 
     def rules(self):
-        challenge = self.connect(True)
+        packet = self.query(PacketFactory.create(PacketType.Rules), True)
 
-        # now obtain the actual rules
-        packet = SourceQueryPacket()
-        packet.putLong(WHOLE)
-        packet.putByte(A2S_RULES)
-        packet.putLong(challenge)
-
-        self.udp.send(packet.getvalue())
-        packet = self.receive()
-
-        # this is our rules
         if packet.getByte() == A2S_RULES_REPLY:
             rules = {}
-            numrules = packet.getShort()
+            total_rules = packet.getShort()
 
-            # TF2 sends incomplete packets, so we have to ignore numrules
-            while 1:
-                try:
-                    key = packet.getString()
-                    rules[key] = packet.getString()
-                except:
-                    break
+            for i in range(total_rules):
+                rules.setdefault(packet.getString(), packet.getString())
 
             return rules
