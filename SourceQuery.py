@@ -3,6 +3,7 @@
 
 #------------------------------------------------------------------------------
 # SourceQuery - Python class for querying info from Source Dedicated Servers
+# Copyright (c) 2012 Alex Kuhrt <alex@qrt.de>
 # Copyright (c) 2010 Andreas Klauer <Andreas.Klauer@metamorpher.de>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,86 +31,48 @@
 #       not implemented yet because I couldn't find a server that does this.
 
 import socket
-import io
-import struct
 import time
+
+from packet import PacketBuffer
+from server import Server
 
 PACKET_SIZE = 1400
 PACKET_HEAD = -1
 PACKET_SPLIT = -2
-
-A2S_INFO = ord('T')
-A2S_INFO_STRING = 'Source Engine Query'
-A2S_INFO_REPLY = ord('I')
-A2S_PLAYER = ord('U')
-A2S_PLAYER_REPLY = ord('D')
-A2S_RULES = ord('V')
-A2S_RULES_REPLY = ord('E')
-EMPTY_CHALLENGE = -1
-S2C_CHALLENGE = ord('A')
-
-
-class SourceQueryPacket(io.BytesIO):
-    def putByte(self, value):
-        self.write(struct.pack('<B', value))
-
-    def getByte(self):
-        return struct.unpack('<B', self.read(1))[0]
-
-    def putShort(self, value):
-        self.write(struct.pack('<h', value))
-
-    def getShort(self):
-        return struct.unpack('<h', self.read(2))[0]
-
-    def putLong(self, value):
-        self.write(struct.pack('<l', value))
-
-    def getLong(self):
-        return struct.unpack('<l', self.read(4))[0]
-
-    def getLongLong(self):
-        return struct.unpack('<Q', self.read(8))[0]
-
-    def putFloat(self, value):
-        self.write(struct.pack('<f', value))
-
-    def getFloat(self):
-        return struct.unpack('<f', self.read(4))[0]
-
-    def putString(self, value):
-        self.write(bytearray('{0}\x00'.format(value), 'utf-8'))
-
-    def getString(self):
-        value = []
-        while True:
-            char = self.read(1)
-            if char == b'\x00':
-                break
-            else:
-                value.append(char)
-        return ''.join(map(lambda c: chr(ord(c)), value))
 
 
 class PacketType:
     Info, Challenge, Players, Rules = range(4)
 
 
+class RequestType:
+    Info = 'TSource Engine Query'
+    Challenge = -1
+    Players = 0x55
+    Rules = 0x56
+
+
+class ResponseType:
+    Info = 0x49
+    Challenge = 0x41
+    Players = 0x44
+    Rules = 0x45
+
+
 class PacketFactory:
     def create(packet_type):
-        packet = SourceQueryPacket()
-        packet.putLong(PACKET_HEAD)
+        packet = PacketBuffer()
+        packet.put_long(PACKET_HEAD)
 
         if packet_type == PacketType.Info:
-            packet.putByte(A2S_INFO)
-            packet.putString(A2S_INFO_STRING)
+            packet.put_string(RequestType.Info)
         elif packet_type == PacketType.Challenge:
-            packet.putByte(A2S_PLAYER)
-            packet.putLong(PACKET_HEAD)
+            packet.put_byte(RequestType.Players)
+            packet.put_long(RequestType.Challenge)
         elif packet_type == PacketType.Players:
-            packet.putByte(A2S_PLAYER)
+            packet.put_byte(RequestType.Players)
         elif packet_type == PacketType.Rules:
-            packet.putByte(A2S_RULES)
+            packet.put_byte(RequestType.Rules)
         else:
             return None
 
@@ -128,136 +91,141 @@ class SourceQuery:
     print server.rules()
     """
 
-    def __init__(self, host, port=27015, timeout=1.0):
-        self.server = (host, port)
-        self.timeout = timeout
-        self.challenge = EMPTY_CHALLENGE
-        self.connect()
+    def __init__(self, host, port=27015, timeout=1):
+        self.server = Server(socket.gethostbyname(host), port)
+        self._timeout = timeout
+        self._challenge = RequestType.Challenge
+        self._connect()
 
     def __del__(self):
-        self.udp.close()
+        self._connection.close()
 
-    def connect(self):
-        self.udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.udp.settimeout(self.timeout)
-        self.udp.connect(self.server)
+    def _connect(self):
+        self._connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._connection.settimeout(self._timeout)
+        self._connection.connect(self.server.as_tuple())
 
-    def query(self, packet, challenge=False):
+    def _query(self, packet, challenge=False):
         if challenge:
-            packet.putLong(self.get_challenge())
+            packet.put_long(self._get_challenge())
 
-        self.udp.send(packet.getvalue())
-        return self.receive()
+        self._connection.send(packet.getvalue())
+        return self._receive()
 
-    def receive(self, packet_buffer={}):
-        packet = SourceQueryPacket(self.udp.recv(PACKET_SIZE))
-        packet_type = packet.getLong()
+    def _receive(self, packet_buffer={}):
+        packet = PacketBuffer(self._connection.recv(PACKET_SIZE))
+        packet_type = packet.get_long()
 
         if packet_type == PACKET_HEAD:
             return packet
 
         elif packet_type == PACKET_SPLIT:
-            request_id = packet.getLong() # compressed?
+            request_id = packet.get_long()  # TODO: compressed?
 
             if request_id not in packet_buffer:
                 packet_buffer.setdefault(request_id, [])
 
-            total_packets = packet.getByte()
-            current_packet_number = packet.getByte()
-            paket_size = packet.getShort()
+            total_packets = packet.get_byte()
+            current_packet_number = packet.get_byte()
+            paket_size = packet.get_short()
             packet_buffer[request_id].insert(current_packet_number, packet.read())
 
             if current_packet_number == total_packets - 1:
-                full_packet = SourceQueryPacket(b''.join(packet_buffer[request_id]))
+                full_packet = PacketBuffer(b''.join(packet_buffer[request_id]))
 
-                if full_packet.getLong() == PACKET_HEAD:
+                if full_packet.get_long() == PACKET_HEAD:
                     return full_packet
             else:
-                return self.receive(packet_buffer)
+                return self._receive(packet_buffer)
 
-    def get_challenge(self):
-        if self.challenge != EMPTY_CHALLENGE:
-            return self.challenge
+    def _get_challenge(self):
+        if self._challenge != RequestType.Challenge:
+            return self._challenge
 
-        packet = self.query(PacketFactory.create(PacketType.Challenge))
+        packet = self._query(PacketFactory.create(PacketType.Challenge))
 
-        if packet.getByte() == S2C_CHALLENGE:
-            self.challenge = packet.getLong()
-            return self.challenge
+        if packet.get_byte() == ResponseType.Challenge:
+            self._challenge = packet.get_long()
+            return self._challenge
 
     def ping(self):
-        return self.info()['ping']
+        MAX_LOOPS = 3
+        return round(sum(map(lambda ping: self.info()['ping'],
+                             range(MAX_LOOPS))) / MAX_LOOPS, 2)
+
 
     def info(self):
         timer_start = time.time()
-        packet = self.query(PacketFactory.create(PacketType.Info))
+        packet = self._query(PacketFactory.create(PacketType.Info))
         timer_end = time.time()
 
-        if packet.getByte() == A2S_INFO_REPLY:
+        if packet.get_byte() == ResponseType.Info:
             result = {
-                'ping': timer_end - timer_start,
-                'network_version': packet.getByte(),
-                'hostname': packet.getString(),
-                'map': packet.getString(),
-                'gamedir': packet.getString(),
-                'gamedesc': packet.getString(),
-                'appid': packet.getShort(),
-                'numplayers':  packet.getByte(),
-                'maxplayers': packet.getByte(),
-                'numbots': packet.getByte(),
-                'dedicated': chr(packet.getByte()),
-                'os': chr(packet.getByte()),
-                'passworded': packet.getByte(),
-                'secure': packet.getByte(),
-                'version': packet.getString()
+                'protocol_version': packet.get_byte(),
+                'server_name': packet.get_string(),
+                'game_map': packet.get_string(),
+                'game_directory': packet.get_string(),
+                'game_description': packet.get_string(),
+                'game_app_id': packet.get_short(),
+                'players_current':  packet.get_byte(),
+                'players_max': packet.get_byte(),
+                'players_bot': packet.get_byte(),
+                'server_type': chr(packet.get_byte()),
+                'server_os': chr(packet.get_byte()),
+                'password': packet.get_byte(),
+                'secure': packet.get_byte(),
+                'game_version': packet.get_string()
             }
 
             try:
-                edf = packet.getByte()
-                result['edf'] = edf
+                result['extra_data_flag'] = packet.get_byte()
             except:
                 pass
             else:
-                if edf & 0x80:
-                    result['port'] = packet.getShort()
-                if edf & 0x10:
-                    result['steamid'] = packet.getLongLong()
-                if edf & 0x40:
-                    result['specport'] = packet.getShort()
-                    result['specname'] = packet.getString()
-                if edf & 0x20:
-                    result['tag'] = packet.getString()
-                if edf & 0x01:
-                    result['game_id'] = packet.getLongLong()
+                if result['extra_data_flag'] & 0x80:
+                    result['server_port'] = packet.get_short()
+                if result['extra_data_flag'] & 0x10:
+                    result['server_steam_id'] = packet.get_long_long()
+                if result['extra_data_flag'] & 0x40:
+                    result['server_spectator_port'] = packet.get_short()
+                    result['server_spectator_name'] = packet.get_string()
+                if result['extra_data_flag'] & 0x20:
+                    result['server_tags'] = packet.get_string()
+                if result['extra_data_flag'] & 0x01:
+                    result['server_game_id'] = packet.get_long_long()
             finally:
+                result['server_ip'] =  self.server.ip
+                result['ping'] = round((timer_end - timer_start) * 1000, 2)
+                result['players_human'] = result['players_current'] \
+                                          - result['players_bot']
                 return result
 
     def players(self):
-        packet = self.query(PacketFactory.create(PacketType.Players), True)
+        packet = self._query(PacketFactory.create(PacketType.Players), True)
 
-        if packet.getByte() == A2S_PLAYER_REPLY:
-            total_players = packet.getByte()
+        if packet.get_byte() == ResponseType.Players:
+            total_players = packet.get_byte()
             player_list = []
 
             for i in range(total_players):
                 player = {
-                    'index': packet.getByte(),
-                    'name': packet.getString(),
-                    'kills': packet.getLong(),
-                    'time': packet.getFloat()
+                    'index': packet.get_byte(),
+                    'name': packet.get_string(),
+                    'kills': packet.get_long(),
+                    'playtime': packet.get_float()
                 }
                 player_list.append(player)
 
             return player_list
 
     def rules(self):
-        packet = self.query(PacketFactory.create(PacketType.Rules), True)
+        packet = self._query(PacketFactory.create(PacketType.Rules), True)
 
-        if packet.getByte() == A2S_RULES_REPLY:
+        if packet.get_byte() == ResponseType.Rules:
             rules = {}
-            total_rules = packet.getShort()
+            total_rules = packet.get_short()
 
             for i in range(total_rules):
-                rules.setdefault(packet.getString(), packet.getString())
+                rules.setdefault(packet.get_string(), packet.get_string())
 
             return rules
