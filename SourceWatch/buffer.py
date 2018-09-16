@@ -1,53 +1,50 @@
-# -*- coding: utf-8 -*-
-
 import io
 import struct
 
 
-class PacketBuffer(io.BytesIO):
+class SteamPacketBuffer(io.BytesIO):
+    """In-memory byte buffer."""
+
     def __len__(self):
         return len(self.getvalue())
 
     def __repr__(self):
-        return '<PacketBuffer: {}>'.format(len(self))
+        return '<PacketBuffer: {}: {}>'.format(len(self), self.getvalue())
 
     def __str__(self):
         return str(self.getvalue())
 
-    def is_empty(self):
-        return self.tell() == len(self)
-
-    def get_byte(self):
+    def read_byte(self):
         return struct.unpack('<B', self.read(1))[0]
 
-    def put_byte(self, value):
+    def write_byte(self, value):
         self.write(struct.pack('<B', value))
 
-    def get_short(self):
+    def read_short(self):
         return struct.unpack('<h', self.read(2))[0]
 
-    def put_short(self, value):
+    def write_short(self, value):
         self.write(struct.pack('<h', value))
 
-    def get_float(self):
+    def read_float(self):
         return struct.unpack('<f', self.read(4))[0]
 
-    def put_float(self, value):
+    def write_float(self, value):
         self.write(struct.pack('<f', value))
 
-    def get_long(self):
+    def read_long(self):
         return struct.unpack('<l', self.read(4))[0]
 
-    def put_long(self, value):
+    def write_long(self, value):
         self.write(struct.pack('<l', value))
 
-    def get_long_long(self):
+    def read_long_long(self):
         return struct.unpack('<Q', self.read(8))[0]
 
-    def put_long_long(self, value):
+    def write_long_long(self, value):
         self.write(struct.pack('<Q', value))
 
-    def get_string(self):
+    def read_string(self):
         # TODO: find a more pythonic way doing this
         value = []
         while True:
@@ -58,7 +55,5 @@ class PacketBuffer(io.BytesIO):
                 value.append(char)
         return ''.join(map(lambda char: chr(ord(char)), value))
 
-    def put_string(self, value):
+    def write_string(self, value):
         self.write(bytearray('{0}\x00'.format(value), 'utf-8'))
-
-
