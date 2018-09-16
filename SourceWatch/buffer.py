@@ -4,8 +4,6 @@ import struct
 
 class SteamPacketBuffer(io.BytesIO):
     """In-memory byte buffer."""
-    def __init__(self, *args, **kwargs):
-        super(SteamPacketBuffer, self).__init__(*args, **kwargs)
 
     def __len__(self):
         return len(self.getvalue())

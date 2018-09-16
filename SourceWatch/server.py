@@ -1,9 +1,12 @@
-# -*- coding: utf-8 -*-
-
 class Server:
+    @classmethod
+    def from_str(cls, string):
+        ip, port = string.split(':')
+        return cls(ip, int(port))
+
     def __init__(self, ip, port):
         self.ip = ip
-        self.port = int(port)
+        self.port = port
 
     def __getattribute__(self, attr):
         try:
@@ -35,11 +38,6 @@ class Server:
         self.__dict__['name'] = name
 
     name = property(_get_name, _set_name)
-
-    @classmethod
-    def from_str(cls, string):
-        ip, port = string.split(':')
-        return cls(ip, port)
 
     def as_tuple(self):
         return (self.ip, self.port)

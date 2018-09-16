@@ -1,45 +1,57 @@
+import importlib
 import io
 import struct
-import importlib
 
-from buffer import SteamPacketBuffer
+from .buffer import SteamPacketBuffer
 
-def create_response(request_class_name):
-    """Create a ResponsePackage instance from a RequestPackage class name."""
+
+def create_response(request_class_name, *args):
+    """Create a ResponsePaket instance from a RequestPaket class name."""
     name = request_class_name[:-len('Request')]
-    ResponseClass = globals()['{}Response'.format(name)]
-    return ResponseClass
+    ResponsePaket = globals()['{}Response'.format(name)]
+    return ResponsePaket(*args)
 
 
-class BasePackage:
+class Challengeable:
+    """Flag a Paket to request a challenge."""
+    pass
+
+
+class BasePaket:
     def __init__(self):
-      self._buffer = SteamPacketBuffer()
-      self._header = None
+        self._buffer = SteamPacketBuffer()
+        self._header = None
 
-
-class RequestPackage(BasePackage):
-    PACKAGE_HEADER = -1
-
-    def __init__(self, challange=None):
-        super(RequestPackage, self).__init__()
-        self._challange = challange
-        self._buffer.write_long(self.PACKAGE_HEADER)
-        self._buffer.write_byte(self.REQUEST_HEADER)
-        if 'REQUEST_PAYLOAD' in dir(self):
-            self._buffer.write_string(self.REQUEST_PAYLOAD)
-        if self._challange:
-            self._buffer.write_long(self._challange)
-
-    def as_bytes(self):
-        return self._buffer.getvalue()
+    def __repr__(self):
+        return '<{}> buffer:{}'.format(self.class_name(), self._buffer.getvalue())
 
     def class_name(self):
         return self.__class__.__name__
 
 
-class ResponsePackage(BasePackage):
+class RequestPaket(BasePaket):
+    PAKET_HEADER = -1
+
+    def __init__(self):
+        super(RequestPaket, self).__init__()
+        self._buffer.write_long(self.PAKET_HEADER)
+        self._buffer.write_byte(self.REQUEST_HEADER)
+
+    def as_bytes(self):
+        return self._buffer.getvalue()
+
+    @property
+    def challenge(self):
+        return self._challenge
+
+    @challenge.setter
+    def challenge(self, value):
+        self._buffer.write_long(value)
+
+
+class ResponsePaket(BasePaket):
     def __init__(self, buffer, ping):
-        super(ResponsePackage, self).__init__()
+        super(ResponsePaket, self).__init__()
         self._buffer = buffer
         self._ping = ping
         self._result = None
@@ -53,22 +65,30 @@ class ResponsePackage(BasePackage):
             self._header = self._buffer.read_byte()
         return self._header
 
+    @property
+    def ping(self):
+        return self._ping
+
     def result(self):
         """Change stream position back to the beginning."""
         self._buffer.seek(0)
         return self._result
 
 
-class InfoRequest(RequestPackage):
+class InfoRequest(RequestPaket):
     REQUEST_HEADER = 0x54
     REQUEST_PAYLOAD = 'Source Engine Query'
 
+    def __init__(self):
+        super(InfoRequest, self).__init__()
+        self._buffer.write_string(self.REQUEST_PAYLOAD)
 
-class InfoResponse(ResponsePackage):
+
+class InfoResponse(ResponsePaket):
     RESPONSE_HEADER = 0x49
 
     def result(self):
-        self._result = {
+        info = {
             'server_protocol_version': self._buffer.read_byte(),
             'server_name': self._buffer.read_string(),
             'game_map': self._buffer.read_string(),
@@ -88,37 +108,36 @@ class InfoResponse(ResponsePackage):
         try:
             extra_data_flags = self._buffer.read_byte()
         except:
-            pass
+            self.logger.debug('No extra data flags set.')
         else:
             if extra_data_flags & 0x80:
-                self._result['server_port'] = self._buffer.read_short()
+                info['server_port'] = self._buffer.read_short()
             if extra_data_flags & 0x10:
-                self._result['server_steam_id'] = self._buffer.read_long_long()
+                info['server_steam_id'] = self._buffer.read_long_long()
             if extra_data_flags & 0x40:
-                self._result['server_spectator_port'] = self._buffer.read_short()
-                self._result['server_spectator_name'] = self._buffer.read_string()
+                info['server_spectator_port'] = self._buffer.read_short()
+                info['server_spectator_name'] = self._buffer.read_string()
             if extra_data_flags & 0x20:
-                self._result['server_tags'] = self._buffer.read_string()
+                info['server_tags'] = self._buffer.read_string()
             if extra_data_flags & 0x01:
                 """A more accurate AppID as the earlier appID could have benn truncated as it was forced into 16-bit storage"""
-                self._result['game_app_id'] = self._buffer.read_long_long()
+                info['game_app_id'] = self._buffer.read_long_long()
         finally:
-            self._result['server_ping'] = self._ping
-            self._result['players_human'] = self._result['players_current'] - self._result['players_bot']
+            info['players_human'] = info['players_current'] - info['players_bot']
 
-        return super(InfoResponse, self).result()
+        return {'info': info}
 
 
-class ChallangeRequest(RequestPackage):
+class ChallengeRequest(RequestPaket):
     REQUEST_HEADER = 0x56
     REQUEST_CHALLANGE = -1
 
     def __init__(self):
-        super(ChallangeRequest, self).__init__(self.REQUEST_CHALLANGE)
+        super(ChallengeRequest, self).__init__()
+        self.challenge = self.REQUEST_CHALLANGE
 
 
-
-class ChallangeResponse(ResponsePackage):
+class ChallengeResponse(ResponsePaket):
     RESPONSE_HEADER = 0x41
 
     @property
@@ -126,27 +145,28 @@ class ChallangeResponse(ResponsePackage):
         return self._buffer.read_long()
 
 
-class RulesRequest(RequestPackage):
+class RulesRequest(RequestPaket, Challengeable):
     REQUEST_HEADER = 0x56
 
 
-class RulesResponse(ResponsePackage):
+class RulesResponse(ResponsePaket):
     RESPONSE_HEADER = 0x45
 
     def result(self):
+        rules = {}
         total_rules = self._buffer.read_short()
         for _ in range(total_rules):
             key = self._buffer.read_string()
             value = self._buffer.read_string()
-            self._result.setdefault(key, value)
-        return super(RulesResponse, self).result()
+            rules.setdefault(key, value)
+        return {'rules': rules}
 
 
-class PlayersRequest(RequestPackage):
+class PlayersRequest(RequestPaket, Challengeable):
     REQUEST_HEADER = 0x55
 
 
-class PlayersResponse(ResponsePackage):
+class PlayersResponse(ResponsePaket):
     RESPONSE_HEADER = 0x44
 
     def result(self):
@@ -157,8 +177,7 @@ class PlayersResponse(ResponsePackage):
                 'id': self._buffer.read_byte(),
                 'name': self._buffer.read_string(),
                 'kills': self._buffer.read_long(),
-                'playtime': self._buffer.read_float()
+                'play_time': self._buffer.read_float()
             }
             players.append(player)
-        self._result = players
-        return super(PlayersResponse, self).result()
+        return {'players': players}
