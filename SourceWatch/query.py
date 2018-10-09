@@ -35,7 +35,7 @@ class Query:
 
     def __init__(self, host, port=27015, timeout=1):
         self.logger = logging.getLogger('SourceWatch')
-        self.server = Server(socket.gethostbyname(host), port)
+        self.server = Server(socket.gethostbyname(host), int(port))
         self._timeout = timeout
         self._connect()
 
