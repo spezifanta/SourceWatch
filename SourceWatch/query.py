@@ -59,7 +59,7 @@ class Query:
             return packet
 
         elif response_type == MULTIPLE_PACKET_RESPONSE:
-            self.logger.debugg('Multiple packet response')
+            self.logger.debug('Multiple packet response')
             request_id = packet.read_long()  # TODO: compressed?
 
             if request_id not in packet_buffer:
