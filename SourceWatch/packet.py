@@ -1,42 +1,39 @@
-import importlib
-import io
-import struct
-
 from .buffer import SteamPacketBuffer
 
 
-def create_response(request_class_name, *args):
-    """Create a ResponsePaket instance from a RequestPaket class name."""
-    name = request_class_name[: -len("Request")]
-    ResponsePaket = globals()["{}Response".format(name)]
-    return ResponsePaket(*args)
+def create_response(request_packet_class_name: str, *args) -> "ResponsePacket":
+    """Create a ResponsePacket instance from a RequestPacket class name."""
+    name = request_packet_class_name[: -len("Request")]
+    ResponsePacket = globals()[f"{name}Response"]
+    return ResponsePacket(*args)
 
 
 class Challengeable:
-    """Flag a Paket to request a challenge."""
+    """Flag a Packet to request a challenge."""
 
     pass
 
 
-class BasePaket:
+class BasePacket:
     def __init__(self):
         self._buffer = SteamPacketBuffer()
         self._header = None
 
     def __repr__(self):
-        return "<{}> buffer:{}".format(self.class_name(), self._buffer.getvalue())
+        return f"<{self.class_name()}> buffer:{self._buffer.getvalue()}"
 
     def class_name(self):
         return self.__class__.__name__
 
 
-class RequestPaket(BasePaket):
-    PAKET_HEADER = -1
+class RequestPacket(BasePacket):
+    PACKET_HEADER = -1
 
     def __init__(self):
-        super(RequestPaket, self).__init__()
-        self._buffer.write_long(self.PAKET_HEADER)
+        super().__init__()
+        self._buffer.write_long(self.PACKET_HEADER)
         self._buffer.write_byte(self.REQUEST_HEADER)
+        self._challenge = None
 
     def as_bytes(self):
         return self._buffer.getvalue()
@@ -47,12 +44,13 @@ class RequestPaket(BasePaket):
 
     @challenge.setter
     def challenge(self, value):
+        self._challenge = value
         self._buffer.write_long(value)
 
 
-class ResponsePaket(BasePaket):
+class ResponsePacket(BasePacket):
     def __init__(self, buffer, ping):
-        super(ResponsePaket, self).__init__()
+        super().__init__()
         self._buffer = buffer
         self._ping = ping
         self._result = None
@@ -76,17 +74,17 @@ class ResponsePaket(BasePaket):
         return self._result
 
 
-class InfoRequest(RequestPaket):
+class InfoRequest(RequestPacket):
     REQUEST_HEADER = 0x54
     REQUEST_PAYLOAD = "Source Engine Query"
 
     def __init__(self):
-        super(InfoRequest, self).__init__()
+        super().__init__()
         self._buffer.write_string(self.REQUEST_PAYLOAD)
 
 
-class InfoResponse(ResponsePaket):
-    RESPONSE_HEADER = 0x49
+class InfoResponse(ResponsePacket):
+    RESPONSE_HEADER = 0x49  # 0x6D  Counter-Strike 1.6
 
     def result(self):
         info = {
@@ -94,13 +92,13 @@ class InfoResponse(ResponsePaket):
             "server_name": self._buffer.read_string(),
             "game_map": self._buffer.read_string(),
             "game_directory": self._buffer.read_string(),
-            "game_description": self._buffer.read_string(),
+            "game_title": self._buffer.read_string(),
             "game_app_id": self._buffer.read_short(),
             "players_current": self._buffer.read_byte(),
-            "players_max": self._buffer.read_byte(),
-            "players_bot": self._buffer.read_byte(),
-            "server_type": chr(self._buffer.read_byte()),
-            "server_os": chr(self._buffer.read_byte()),
+            "players_max_slots": self._buffer.read_byte(),
+            "players_bots": self._buffer.read_byte(),
+            "server_type": self._buffer.read_char(),
+            "server_os": self._buffer.read_char(),
             "server_password_protected": self._buffer.read_byte(),
             "server_vac_secured": self._buffer.read_byte(),
             "game_version": self._buffer.read_string(),
@@ -108,8 +106,8 @@ class InfoResponse(ResponsePaket):
 
         try:
             extra_data_flags = self._buffer.read_byte()
-        except:
-            self.logger.debug("No extra data flags set.")
+        except Exception:
+            print("No extra data flags set.")
         else:
             if extra_data_flags & 0x80:
                 info["server_port"] = self._buffer.read_short()
@@ -121,24 +119,27 @@ class InfoResponse(ResponsePaket):
             if extra_data_flags & 0x20:
                 info["server_tags"] = self._buffer.read_string()
             if extra_data_flags & 0x01:
-                """A more accurate AppID as the earlier appID could have benn truncated as it was forced into 16-bit storage"""
+                # A more accurate AppID as the earlier appID could have been truncated
                 info["game_app_id"] = self._buffer.read_long_long()
         finally:
-            info["players_human"] = info["players_current"] - info["players_bot"]
+            info["players_humans"] = info["players_current"] - info["players_bots"]
+            info["players_free_slots"] = (
+                info["players_max_slots"] - info["players_current"]
+            )
 
         return {"info": info}
 
 
-class ChallengeRequest(RequestPaket):
+class ChallengeRequest(RequestPacket):
     REQUEST_HEADER = 0x56
-    REQUEST_CHALLANGE = -1
+    REQUEST_CHALLENGE = -1
 
     def __init__(self):
-        super(ChallengeRequest, self).__init__()
-        self.challenge = self.REQUEST_CHALLANGE
+        super().__init__()
+        self.challenge = self.REQUEST_CHALLENGE
 
 
-class ChallengeResponse(ResponsePaket):
+class ChallengeResponse(ResponsePacket):
     RESPONSE_HEADER = 0x41
 
     @property
@@ -146,11 +147,11 @@ class ChallengeResponse(ResponsePaket):
         return self._buffer.read_long()
 
 
-class RulesRequest(RequestPaket, Challengeable):
+class RulesRequest(RequestPacket, Challengeable):
     REQUEST_HEADER = 0x56
 
 
-class RulesResponse(ResponsePaket):
+class RulesResponse(ResponsePacket):
     RESPONSE_HEADER = 0x45
 
     def result(self):
@@ -159,15 +160,15 @@ class RulesResponse(ResponsePaket):
         for _ in range(total_rules):
             key = self._buffer.read_string()
             value = self._buffer.read_string()
-            rules.setdefault(key, value)
+            rules[key] = value
         return {"rules": rules}
 
 
-class PlayersRequest(RequestPaket, Challengeable):
+class PlayersRequest(RequestPacket, Challengeable):
     REQUEST_HEADER = 0x55
 
 
-class PlayersResponse(ResponsePaket):
+class PlayersResponse(ResponsePacket):
     RESPONSE_HEADER = 0x44
 
     def result(self):

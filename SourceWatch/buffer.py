@@ -1,15 +1,17 @@
-import io
 import struct
+import io
 
 
 class SteamPacketBuffer(io.BytesIO):
     """In-memory byte buffer."""
 
+    __NULL_BYTE = b"\x00"
+
     def __len__(self):
         return len(self.getvalue())
 
     def __repr__(self):
-        return "<PacketBuffer: {}: {}>".format(len(self), self.getvalue())
+        return f"<SteamPacketBuffer: {len(self)}: {self.getvalue}>"
 
     def __str__(self):
         return str(self.getvalue())
@@ -44,16 +46,19 @@ class SteamPacketBuffer(io.BytesIO):
     def write_long_long(self, value):
         self.write(struct.pack("<Q", value))
 
+    def read_char(self):
+        return chr(self.read_byte())
+
     def read_string(self):
-        # TODO: find a more pythonic way doing this
-        value = []
+        """Read a null-terminated UTF-8 encoded string from the buffer."""
+        value = bytearray()
         while True:
             char = self.read(1)
-            if char == b"\x00":
+            if not char or char == self.__NULL_BYTE:
                 break
-            else:
-                value.append(char)
-        return "".join(map(lambda char: chr(ord(char)), value))
+            value.extend(char)
+        return value.decode("utf-8")
 
     def write_string(self, value):
-        self.write(bytearray("{0}\x00".format(value), "utf-8"))
+        """Write a null-terminated UTF-8 encoded string to the buffer."""
+        self.write(value.encode("utf-8") + self.__NULL_BYTE)

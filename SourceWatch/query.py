@@ -33,9 +33,9 @@ class Query:
     print(server.rules())
     """
 
-    def __init__(self, host, port=27015, timeout=1):
+    def __init__(self, host, port=27015, timeout=3):
         self.logger = logging.getLogger("SourceWatch")
-        self.server = Server(socket.gethostbyname(host), int(port))
+        self.server = Server(socket.gethostbyname(host), port)
         self._timeout = timeout
         self._connect()
 
@@ -67,13 +67,13 @@ class Query:
 
             total_packets = packet.read_byte()
             current_packet_number = packet.read_byte()
-            paket_size = packet.read_short()
+            packet_size = packet.read_short()
             packet_buffer[request_id].insert(current_packet_number, packet.read())
 
             if current_packet_number == total_packets - 1:
-                full_packet = PacketBuffer(b"".join(packet_buffer[request_id]))
+                full_packet = SteamPacketBuffer(b"".join(packet_buffer[request_id]))
 
-                if full_packet.read_long() == PACKET_HEAD:
+                if full_packet.read_long() == PACKET_SIZE:
                     return full_packet
             else:
                 return self._receive(packet_buffer)
@@ -87,21 +87,27 @@ class Query:
         response.is_valid()
         return response.raw
 
-    def _send(self, Paket):
-        if isinstance(Paket, Challengeable):
+    def _send(self, packet):
+        self.logger.debug("Sending packet: %s", packet)
+        if isinstance(packet, Challengeable):
             challenge = self._get_challenge()
             self.logger.debug("Using challenge: %s", challenge)
-            Paket.challenge = challenge
+            packet.challenge = challenge
 
         timer_start = time.time()
-        self.logger.debug("Paket: %s", Paket.as_bytes())
-        self._connection.send(Paket.as_bytes())
+        self.logger.debug("packet: %s", packet.as_bytes())
+        self._connection.send(packet.as_bytes())
         result = self._receive()
         ping = round((time.time() - timer_start) * 1000, 2)
-        response = create_response(Paket.class_name(), result, ping)
+        response = create_response(packet.class_name(), result, ping)
 
         if not response.is_valid():
-            raise SourceWatchError("Response paket is invalid.")
+            self.logger.error(
+                "Response packet is invalid. Expected: %s, got: %s",
+                chr(response.RESPONSE_HEADER),
+                chr(response.header),
+            )
+            raise SourceWatchError("Response packet is invalid.")
 
         return response
 
@@ -118,19 +124,13 @@ class Query:
 
         return wrapper
 
-    def ping(self):
+    def ping(self, num_requests=3):
         """Fake ping request. Send three InfoRequets and calculate an average ping."""
         self.logger.info("Sending fake ping request")
-        MAX_LOOPS = 3
-        return round(
-            sum(
-                map(
-                    lambda ping: self.info().get("server").get("ping"), range(MAX_LOOPS)
-                )
-            )
-            / MAX_LOOPS,
-            2,
-        )
+        fetch_ping = lambda _: self.info().get("server").get("ping")
+        total = sum(map(fetch_ping, range(num_requests)))
+        average = round(total / num_requests, 2)
+        return average
 
     @request
     def info(self):
