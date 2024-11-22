@@ -7,13 +7,14 @@ from .buffer import SteamPacketBuffer
 
 def create_response(request_class_name, *args):
     """Create a ResponsePaket instance from a RequestPaket class name."""
-    name = request_class_name[:-len('Request')]
-    ResponsePaket = globals()['{}Response'.format(name)]
+    name = request_class_name[: -len("Request")]
+    ResponsePaket = globals()["{}Response".format(name)]
     return ResponsePaket(*args)
 
 
 class Challengeable:
     """Flag a Paket to request a challenge."""
+
     pass
 
 
@@ -23,7 +24,7 @@ class BasePaket:
         self._header = None
 
     def __repr__(self):
-        return '<{}> buffer:{}'.format(self.class_name(), self._buffer.getvalue())
+        return "<{}> buffer:{}".format(self.class_name(), self._buffer.getvalue())
 
     def class_name(self):
         return self.__class__.__name__
@@ -77,7 +78,7 @@ class ResponsePaket(BasePaket):
 
 class InfoRequest(RequestPaket):
     REQUEST_HEADER = 0x54
-    REQUEST_PAYLOAD = 'Source Engine Query'
+    REQUEST_PAYLOAD = "Source Engine Query"
 
     def __init__(self):
         super(InfoRequest, self).__init__()
@@ -89,43 +90,43 @@ class InfoResponse(ResponsePaket):
 
     def result(self):
         info = {
-            'server_protocol_version': self._buffer.read_byte(),
-            'server_name': self._buffer.read_string(),
-            'game_map': self._buffer.read_string(),
-            'game_directory': self._buffer.read_string(),
-            'game_description': self._buffer.read_string(),
-            'game_app_id': self._buffer.read_short(),
-            'players_current':  self._buffer.read_byte(),
-            'players_max': self._buffer.read_byte(),
-            'players_bot': self._buffer.read_byte(),
-            'server_type': chr(self._buffer.read_byte()),
-            'server_os': chr(self._buffer.read_byte()),
-            'server_password_protected': self._buffer.read_byte(),
-            'server_vac_secured': self._buffer.read_byte(),
-            'game_version': self._buffer.read_string()
+            "server_protocol_version": self._buffer.read_byte(),
+            "server_name": self._buffer.read_string(),
+            "game_map": self._buffer.read_string(),
+            "game_directory": self._buffer.read_string(),
+            "game_description": self._buffer.read_string(),
+            "game_app_id": self._buffer.read_short(),
+            "players_current": self._buffer.read_byte(),
+            "players_max": self._buffer.read_byte(),
+            "players_bot": self._buffer.read_byte(),
+            "server_type": chr(self._buffer.read_byte()),
+            "server_os": chr(self._buffer.read_byte()),
+            "server_password_protected": self._buffer.read_byte(),
+            "server_vac_secured": self._buffer.read_byte(),
+            "game_version": self._buffer.read_string(),
         }
 
         try:
             extra_data_flags = self._buffer.read_byte()
         except:
-            self.logger.debug('No extra data flags set.')
+            self.logger.debug("No extra data flags set.")
         else:
             if extra_data_flags & 0x80:
-                info['server_port'] = self._buffer.read_short()
+                info["server_port"] = self._buffer.read_short()
             if extra_data_flags & 0x10:
-                info['server_steam_id'] = self._buffer.read_long_long()
+                info["server_steam_id"] = self._buffer.read_long_long()
             if extra_data_flags & 0x40:
-                info['server_spectator_port'] = self._buffer.read_short()
-                info['server_spectator_name'] = self._buffer.read_string()
+                info["server_spectator_port"] = self._buffer.read_short()
+                info["server_spectator_name"] = self._buffer.read_string()
             if extra_data_flags & 0x20:
-                info['server_tags'] = self._buffer.read_string()
+                info["server_tags"] = self._buffer.read_string()
             if extra_data_flags & 0x01:
                 """A more accurate AppID as the earlier appID could have benn truncated as it was forced into 16-bit storage"""
-                info['game_app_id'] = self._buffer.read_long_long()
+                info["game_app_id"] = self._buffer.read_long_long()
         finally:
-            info['players_human'] = info['players_current'] - info['players_bot']
+            info["players_human"] = info["players_current"] - info["players_bot"]
 
-        return {'info': info}
+        return {"info": info}
 
 
 class ChallengeRequest(RequestPaket):
@@ -159,7 +160,7 @@ class RulesResponse(ResponsePaket):
             key = self._buffer.read_string()
             value = self._buffer.read_string()
             rules.setdefault(key, value)
-        return {'rules': rules}
+        return {"rules": rules}
 
 
 class PlayersRequest(RequestPaket, Challengeable):
@@ -174,10 +175,10 @@ class PlayersResponse(ResponsePaket):
         players = []
         for _ in range(total_players):
             player = {
-                'id': self._buffer.read_byte(),
-                'name': self._buffer.read_string(),
-                'kills': self._buffer.read_long(),
-                'play_time': self._buffer.read_float()
+                "id": self._buffer.read_byte(),
+                "name": self._buffer.read_string(),
+                "kills": self._buffer.read_long(),
+                "play_time": self._buffer.read_float(),
             }
             players.append(player)
-        return {'players': players}
+        return {"players": players}
