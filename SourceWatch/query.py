@@ -17,10 +17,6 @@ SINGLE_PACKET_RESPONSE = -1
 MULTIPLE_PACKET_RESPONSE = -2
 
 
-class SourceWatchError(Exception):
-    pass
-
-
 class Query:
     """
     Example usage:
@@ -33,7 +29,7 @@ class Query:
     print(server.rules())
     """
 
-    def __init__(self, host, port=27015, timeout=3):
+    def __init__(self, host, port=27015, timeout=10):
         self.logger = logging.getLogger("SourceWatch")
         self.server = Server(socket.gethostbyname(host), port)
         self._timeout = timeout
@@ -52,13 +48,13 @@ class Query:
         response = self._connection.recv(PACKET_SIZE)
         self.logger.debug("Recieved: %s", response)
         packet = SteamPacketBuffer(response)
-        response_type = packet.read_long()
+        respone_format = packet.read_long()
 
-        if response_type == SINGLE_PACKET_RESPONSE:
+        if respone_format == SINGLE_PACKET_RESPONSE:
             self.logger.debug("Single packet response")
             return packet
 
-        elif response_type == MULTIPLE_PACKET_RESPONSE:
+        elif respone_format == MULTIPLE_PACKET_RESPONSE:
             self.logger.debug("Multiple packet response")
             request_id = packet.read_long()  # TODO: compressed?
 
@@ -78,7 +74,7 @@ class Query:
             else:
                 return self._receive(packet_buffer)
         else:
-            self.logger.error("Received invalid response type: %s", response_type)
+            self.logger.error("Received invalid response type: %s", respone_format)
             raise SourceWatchError("Received invalid response type")
 
     def _get_challenge(self):
@@ -98,28 +94,24 @@ class Query:
         self.logger.debug("packet: %s", packet.as_bytes())
         self._connection.send(packet.as_bytes())
         result = self._receive()
+        response_type = result.read_byte()
+        # Reset buffer position and skip reading the request format.
+        result.seek(0)
+        result.read_long()
         ping = round((time.time() - timer_start) * 1000, 2)
-        response = create_response(packet.class_name(), result, ping)
 
-        if not response.is_valid():
-            self.logger.error(
-                "Response packet is invalid. Expected: %s, got: %s",
-                chr(response.RESPONSE_HEADER),
-                chr(response.header),
-            )
-            raise SourceWatchError("Response packet is invalid.")
-
-        return response
+        return create_response(response_type, result, ping)
 
     def request(request):
         def wrapper(self):
             response = request(self)
             result = response.result()
-            result["server"] = {
-                "ip": self.server.ip,
-                "port": self.server.port,
-                "ping": response.ping,
-            }
+            if result is not None:
+                result["server"] = {
+                    "ip": self.server.ip,
+                    "port": self.server.port,
+                    "ping": response.ping,
+                }
             return result
 
         return wrapper

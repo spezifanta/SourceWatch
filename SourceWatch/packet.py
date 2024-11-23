@@ -1,10 +1,26 @@
+from executing import Source
 from .buffer import SteamPacketBuffer
 
 
-def create_response(request_packet_class_name: str, *args) -> "ResponsePacket":
+class SourceWatchError(Exception):
+    pass
+
+
+def create_response(request_type: int, *args) -> "ResponsePacket":
     """Create a ResponsePacket instance from a RequestPacket class name."""
-    name = request_packet_class_name[: -len("Request")]
-    ResponsePacket = globals()[f"{name}Response"]
+    if request_type == InfoResponse.RESPONSE_HEADER:
+        ResponsePacket = InfoResponse
+    elif request_type == InfoGoldSrcResponse.RESPONSE_HEADER:
+        ResponsePacket = InfoGoldSrcResponse
+    elif request_type == PlayersResponse.RESPONSE_HEADER:
+        ResponsePacket = PlayersResponse
+    elif request_type == RulesResponse.RESPONSE_HEADER:
+        ResponsePacket = RulesResponse
+    elif request_type == ChallengeResponse.RESPONSE_HEADER:
+        ResponsePacket = ChallengeResponse
+    else:
+        raise SourceWatchError("Unknown reqonse type", request_type)
+
     return ResponsePacket(*args)
 
 
@@ -55,14 +71,14 @@ class ResponsePacket(BasePacket):
         self._ping = ping
         self._result = None
 
-    def is_valid(self):
-        return self.header == self.RESPONSE_HEADER
-
     @property
     def header(self):
         if self._header is None:
             self._header = self._buffer.read_byte()
         return self._header
+
+    def is_valid(self):
+        return self.header == self.RESPONSE_HEADER
 
     @property
     def ping(self):
@@ -126,6 +142,35 @@ class InfoResponse(ResponsePacket):
             info["players_free_slots"] = (
                 info["players_max_slots"] - info["players_current"]
             )
+
+        return {"info": info}
+
+
+class InfoGoldSrcResponse(ResponsePacket):
+    RESPONSE_HEADER = 0x6D
+
+    def result(self):
+        info = {
+            "server_address": self._buffer.read_string(),
+            "server_name": self._buffer.read_string(),
+            "game_map": self._buffer.read_string(),
+            "game_directory": self._buffer.read_string(),
+            "game_title": self._buffer.read_string(),
+            "players_current": self._buffer.read_byte(),
+            "players_max_slots": self._buffer.read_byte(),
+            "server_protocol_version": self._buffer.read_byte(),
+            "server_type": self._buffer.read_char(),
+            "server_os": self._buffer.read_char(),
+            "server_password_protected": self._buffer.read_byte(),
+            "game_mod": self._buffer.read_byte(),
+            "server_vac_secured": self._buffer.read_byte(),
+            "players_bots": self._buffer.read_byte(),
+        }
+
+        # TODO handle non-Mod
+
+        info["players_humans"] = info["players_current"]
+        info["players_free_slots"] = info["players_max_slots"] - info["players_current"]
 
         return {"info": info}
 
