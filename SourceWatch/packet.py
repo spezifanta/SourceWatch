@@ -1,4 +1,3 @@
-from executing import Source
 from .buffer import SteamPacketBuffer
 
 
@@ -159,8 +158,8 @@ class InfoGoldSrcResponse(ResponsePacket):
             "players_current": self._buffer.read_byte(),
             "players_max_slots": self._buffer.read_byte(),
             "server_protocol_version": self._buffer.read_byte(),
-            "server_type": self._buffer.read_char(),
-            "server_os": self._buffer.read_char(),
+            "server_type": chr(self._buffer.read_byte()),
+            "server_os": chr(self._buffer.read_byte()),
             "server_password_protected": self._buffer.read_byte(),
             "game_mod": self._buffer.read_byte(),
             "server_vac_secured": self._buffer.read_byte(),
@@ -189,7 +188,11 @@ class ChallengeResponse(ResponsePacket):
 
     @property
     def raw(self):
+        self._buffer.seek(0)
+        self._buffer.read_long()
+        self._buffer.read_byte()
         return self._buffer.read_long()
+        return 1
 
 
 class RulesRequest(RequestPacket, Challengeable):

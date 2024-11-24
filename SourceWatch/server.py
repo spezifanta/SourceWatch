@@ -1,12 +1,23 @@
+"""
+A server should have it's own reprensentation.
+"""
+
+
 class Server:
     @classmethod
-    def from_str(cls, string):
-        ip, port = string.split(":")
-        return cls(ip, int(port))
+    def from_str(cls, server: str):
+        """Create a Server instance from a string.
+        Example: Server.from_str('10.0.0.3:27016')
+        """
+        try:
+            ip, port = server.split(":")
+            return cls(ip, int(port))
+        except ValueError:
+            raise ValueError('Invalid server format. Use "<IP-ADDRESS>:<PORT>"')
 
-    def __init__(self, ip, port):
+    def __init__(self, ip: str, port: int = 27015):
         self.ip = ip
-        self.port = port
+        self.port = self._validate_port(port)
 
     def __getattribute__(self, attr):
         try:
@@ -15,16 +26,16 @@ class Server:
             return self.__dict__.get(attr, None)
 
     def __repr__(self):
-        return "<Server: {0}>".format(self)
+        return f"<Server: {self}>"
 
     def __str__(self):
-        return "{0}:{1}".format(self.ip, self.port)
+        return f"{self.ip}:{self.port}"
 
     def __eq__(self, other):
-        return str(self) == str(other)
+        return isinstance(other, Server) and str(self) == str(other)
 
     def __ne__(self, other):
-        return str(self) != str(other)
+        return not (self == other)
 
     def __iter__(self):
         for attribute in self.__dict__:
@@ -39,5 +50,11 @@ class Server:
 
     name = property(_get_name, _set_name)
 
-    def as_tuple(self):
+    def as_tuple(self) -> tuple:
+        """Return server IP and port as tuple."""
         return (self.ip, self.port)
+
+    def _validate_port(self, port: int):
+        if port < 1 or port > 65535:
+            raise ValueError("Invalid port range.")
+        return port

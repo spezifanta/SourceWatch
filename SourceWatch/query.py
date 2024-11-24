@@ -84,12 +84,12 @@ class Query:
         return response.raw
 
     def _send(self, packet):
-        self.logger.debug("Sending packet: %s", packet)
         if isinstance(packet, Challengeable):
             challenge = self._get_challenge()
             self.logger.debug("Using challenge: %s", challenge)
             packet.challenge = challenge
 
+        self.logger.debug("Sending packet: %s", packet)
         timer_start = time.time()
         self.logger.debug("packet: %s", packet.as_bytes())
         self._connection.send(packet.as_bytes())
