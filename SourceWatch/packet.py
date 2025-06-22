@@ -102,6 +102,8 @@ class InfoResponse(ResponsePacket):
     RESPONSE_HEADER = 0x49  # 0x6D  Counter-Strike 1.6
 
     def result(self):
+        # Consume the header byte before parsing the actual payload
+        self.header
         info = {
             "server_protocol_version": self._buffer.read_byte(),
             "server_name": self._buffer.read_string(),
@@ -149,6 +151,8 @@ class InfoGoldSrcResponse(ResponsePacket):
     RESPONSE_HEADER = 0x6D
 
     def result(self):
+        # Consume the header byte before parsing the actual payload
+        self.header
         info = {
             "server_address": self._buffer.read_string(),
             "server_name": self._buffer.read_string(),
@@ -203,6 +207,8 @@ class RulesResponse(ResponsePacket):
     RESPONSE_HEADER = 0x45
 
     def result(self):
+        # Consume the header byte before parsing the actual payload
+        self.header
         rules = {}
         total_rules = self._buffer.read_short()
         for _ in range(total_rules):
@@ -220,6 +226,8 @@ class PlayersResponse(ResponsePacket):
     RESPONSE_HEADER = 0x44
 
     def result(self):
+        # Consume the header byte before parsing the actual payload
+        self.header
         total_players = self._buffer.read_byte()
         players = []
         for _ in range(total_players):
