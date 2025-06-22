@@ -22,14 +22,14 @@ Info output:
 {
   "info": {
     "game_app_id": 70,
-    "game_description": "Half-Life",
+    "game_title": "Half-Life",
     "game_directory": "valve",
     "game_map": "crossfire",
     "game_version": "1.1.2.2/Stdio",
-    "players_bot": 0,
+    "players_bots": 0,
     "players_current": 0,
-    "players_human": 0,
-    "players_max": 12,
+    "players_humans": 0,
+    "players_max_slots": 12,
     "server_name": "SteamCalculator.com #1 HLDM",
     "server_os": "l",
     "server_password_protected": 0,
