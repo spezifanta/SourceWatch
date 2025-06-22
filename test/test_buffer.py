@@ -6,6 +6,16 @@ class TestBuffer(unittest.TestCase):
     def setUp(self):
         self.buffer = SourceWatch.buffer.SteamPacketBuffer()
 
+    def test_char(self):
+        """Ensure single ASCII characters round-trip correctly."""
+        message = 'A'
+        self.buffer.write_byte(ord(message))
+
+        self.buffer.seek(0)
+        decoded = self.buffer.read_char()
+
+        self.assertEqual(message, decoded)
+
     def test_byte(self):
         # Given a message which we want to write to the buffer
         message = 0
