@@ -8,12 +8,15 @@ class TestBuffer(unittest.TestCase):
 
     def test_char(self):
         """Ensure single ASCII characters round-trip correctly."""
-        message = 'A'
+        # Given a character which we want to write to the buffer
+        message = "A"
         self.buffer.write_char(message)
 
+        # When reading the buffer from the beginning...
         self.buffer.seek(0)
         decoded = self.buffer.read_char()
 
+        # Then the message from the buffer should match our original character.
         self.assertEqual(message, decoded)
 
     def test_byte(self):
