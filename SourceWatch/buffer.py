@@ -40,6 +40,10 @@ class SteamPacketBuffer(io.BytesIO):
         """Write a 8 bit character or unsigned integer. From 0 to 255"""
         self.write(struct.pack("<B", value))
 
+    def write_char(self, value: str):
+        """Write a single ASCII character."""
+        self.write_byte(ord(value))
+
     def read_short(self) -> int:
         """Read a 16 bit signed integer (2 bytes)."""
         return struct.unpack("<h", self.read(2))[0]
