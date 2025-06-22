@@ -46,7 +46,7 @@ class Query:
 
     def _receive(self, packet_buffer={}):
         response = self._connection.recv(PACKET_SIZE)
-        self.logger.debug("Recieved: %s", response)
+        self.logger.debug("Received: %s", response)
         packet = SteamPacketBuffer(response)
         respone_format = packet.read_long()
 
