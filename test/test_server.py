@@ -11,6 +11,11 @@ class TestServer(unittest.TestCase):
     def test_from_str(self):
         self.assertRaises(ValueError, SourceWatch.Server.from_str, "12")
 
+    def test_from_str_valid(self):
+        server = SourceWatch.Server.from_str("1.2.3.4:27016")
+        self.assertEqual(server.ip, "1.2.3.4")
+        self.assertEqual(server.port, 27016)
+
     def test_equality(self):
         server_a = SourceWatch.Server("1.2.3.4")
         server_b = SourceWatch.Server("1.2.3.4", 27015)
