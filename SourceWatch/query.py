@@ -7,10 +7,17 @@
 import logging
 import socket
 import time
-
 from .buffer import SteamPacketBuffer
 from .server import Server
-from .packet import *
+from .packet import (
+    ChallengeRequest,
+    Challengeable,
+    InfoRequest,
+    PlayersRequest,
+    RulesRequest,
+    SourceWatchError,
+    create_response,
+)
 
 PACKET_SIZE = 1400
 SINGLE_PACKET_RESPONSE = -1
@@ -44,47 +51,66 @@ class Query:
         self._connection.settimeout(self._timeout)
         self._connection.connect(self.server.as_tuple())
 
-    def _receive(self, packet_buffer={}):
+    def _reconnect(self):
+        """Reconnect to ensure fresh connection state"""
+        self._connection.close()
+        self._connect()
+
+    def _receive(self, packet_buffer=None):
         response = self._connection.recv(PACKET_SIZE)
         self.logger.debug("Received: %s", response)
         packet = SteamPacketBuffer(response)
-        respone_format = packet.read_long()
+        response_format = packet.read_long()
 
-        if respone_format == SINGLE_PACKET_RESPONSE:
+        if response_format == SINGLE_PACKET_RESPONSE:
             self.logger.debug("Single packet response")
             return packet
 
-        elif respone_format == MULTIPLE_PACKET_RESPONSE:
+        elif response_format == MULTIPLE_PACKET_RESPONSE:
             self.logger.debug("Multiple packet response")
             request_id = packet.read_long()  # TODO: compressed?
 
+            if packet_buffer is None:
+                packet_buffer = {}
+
             if request_id not in packet_buffer:
-                packet_buffer.setdefault(request_id, [])
+                packet_buffer[request_id] = []
 
             total_packets = packet.read_byte()
             current_packet_number = packet.read_byte()
             packet_size = packet.read_short()
-            packet_buffer[request_id].insert(current_packet_number, packet.read())
+            payload = packet.read()
+
+            # Validate packet size matches what we received
+            if len(payload) != packet_size:
+                self.logger.warning(
+                    "Packet size mismatch: expected %d, got %d",
+                    packet_size,
+                    len(payload),
+                )
+
+            packet_buffer[request_id].insert(current_packet_number, payload)
 
             if current_packet_number == total_packets - 1:
                 full_packet = SteamPacketBuffer(b"".join(packet_buffer[request_id]))
 
-                if full_packet.read_long() == PACKET_SIZE:
+                if full_packet.read_long() == SINGLE_PACKET_RESPONSE:
                     return full_packet
             else:
                 return self._receive(packet_buffer)
         else:
-            self.logger.error("Received invalid response type: %s", respone_format)
+            self.logger.error("Received invalid response type: %s", response_format)
             raise SourceWatchError("Received invalid response type")
 
     def _get_challenge(self):
         response = self._send(ChallengeRequest())
-
         response.is_valid()
         return response.raw
 
     def _send(self, packet):
         if isinstance(packet, Challengeable):
+            # Reconnect to ensure fresh state for challenge-based queries
+            self._reconnect()
             challenge = self._get_challenge()
             self.logger.debug("Using challenge: %s", challenge)
             packet.challenge = challenge
@@ -117,9 +143,12 @@ class Query:
         return wrapper
 
     def ping(self, num_requests=3):
-        """Fake ping request. Send three InfoRequets and calculate an average ping."""
+        """Fake ping request. Send three InfoRequests and calculate an average ping."""
         self.logger.info("Sending fake ping request")
-        fetch_ping = lambda _: self.info().get("server").get("ping")
+
+        def fetch_ping(_):
+            return self.info().get("server").get("ping")
+
         total = sum(map(fetch_ping, range(num_requests)))
         average = round(total / num_requests, 2)
         return average

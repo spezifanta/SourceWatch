@@ -1,3 +1,4 @@
+import struct
 from .buffer import SteamPacketBuffer
 
 
@@ -18,7 +19,7 @@ def create_response(request_type: int, *args) -> "ResponsePacket":
     elif request_type == ChallengeResponse.RESPONSE_HEADER:
         ResponsePacket = ChallengeResponse
     else:
-        raise SourceWatchError("Unknown reqonse type", request_type)
+        raise SourceWatchError("Unknown response type", request_type)
 
     return ResponsePacket(*args)
 
@@ -69,12 +70,7 @@ class ResponsePacket(BasePacket):
         self._buffer = buffer
         self._ping = ping
         self._result = None
-
-    @property
-    def header(self):
-        if self._header is None:
-            self._header = self._buffer.read_byte()
-        return self._header
+        self.header = self._buffer.read_byte()
 
     def is_valid(self):
         return self.header == self.RESPONSE_HEADER
@@ -121,8 +117,9 @@ class InfoResponse(ResponsePacket):
 
         try:
             extra_data_flags = self._buffer.read_byte()
-        except Exception:
-            print("No extra data flags set.")
+        except (IndexError, struct.error):
+            # No extra data flags available. skip the rest.
+            pass
         else:
             if extra_data_flags & 0x80:
                 info["server_port"] = self._buffer.read_short()
@@ -134,7 +131,7 @@ class InfoResponse(ResponsePacket):
             if extra_data_flags & 0x20:
                 info["server_tags"] = self._buffer.read_string()
             if extra_data_flags & 0x01:
-                # A more accurate AppID as the earlier appID could have been truncated
+                # A more accurate AppID as the earlier appID could have been truncated.
                 info["game_app_id"] = self._buffer.read_long_long()
         finally:
             info["players_humans"] = info["players_current"] - info["players_bots"]
@@ -192,7 +189,6 @@ class ChallengeResponse(ResponsePacket):
         self._buffer.read_long()
         self._buffer.read_byte()
         return self._buffer.read_long()
-        return 1
 
 
 class RulesRequest(RequestPacket, Challengeable):
@@ -222,8 +218,9 @@ class PlayersResponse(ResponsePacket):
     def result(self):
         total_players = self._buffer.read_byte()
         players = []
-        for _ in range(total_players):
+        for i in range(total_players):
             player = {
+                "index": i,
                 "id": self._buffer.read_byte(),
                 "name": self._buffer.read_string(),
                 "kills": self._buffer.read_long(),

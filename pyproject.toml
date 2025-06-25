@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sourcewatch"
+version = "0.0.4"
+description = "A library to query information of Goldsrc and Source servers."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Alex Kuhrt", email = "alex@qrt.de" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment",
+    "Topic :: Internet",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["source", "goldsrc", "steam", "server", "query", "valve"]
+requires-python = ">=3.8"
+
+[project.urls]
+Homepage = "https://github.com/SourceWatch/SourceWatch"
+Repository = "https://github.com/SourceWatch/SourceWatch"
+Issues = "https://github.com/SourceWatch/SourceWatch/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["SourceWatch"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/SourceWatch",
+    "/test",
+    "/README.md",
+    "/LICENSE",
+]

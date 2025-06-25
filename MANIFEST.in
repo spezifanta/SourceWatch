@@ -1,0 +1,4 @@
+include README.md
+include LICENSE
+recursive-include SourceWatch *.py
+recursive-include test *.py
