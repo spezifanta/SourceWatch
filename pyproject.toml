@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sourcewatch"
-version = "0.0.5"
+version = "0.0.6"
 description = "A library to query information of Goldsrc and Source servers."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Internet",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-keywords = ["source", "goldsrc", "steam", "server", "query", "valve"]
+keywords = ["source", "goldsrc", "steam", "server", "query", "valve", "mcp"]
 requires-python = ">=3.8"
 dependencies = ["pydantic>=2.0.0"]
 
