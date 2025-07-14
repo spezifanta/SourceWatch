@@ -4,13 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sourcewatch"
-version = "0.0.4"
+version = "0.0.5"
 description = "A library to query information of Goldsrc and Source servers."
 readme = "README.md"
 license = { file = "LICENSE" }
-authors = [
-    { name = "Alex Kuhrt", email = "alex@qrt.de" }
-]
+authors = [{ name = "Alex Kuhrt", email = "alex@qrt.de" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -38,9 +36,4 @@ Issues = "https://github.com/SourceWatch/SourceWatch/issues"
 packages = ["SourceWatch"]
 
 [tool.hatch.build.targets.sdist]
-include = [
-    "/SourceWatch",
-    "/test",
-    "/README.md",
-    "/LICENSE",
-]
+include = ["/SourceWatch", "/test", "/README.md", "/LICENSE"]
