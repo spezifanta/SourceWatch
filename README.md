@@ -11,9 +11,9 @@ A Python 3 library for querying information from Valve's GoldSrc and Source game
 - Support for both GoldSrc and Source engine servers
 - Query server information, player lists, and server rules
 - Ping measurement functionality
-- Challenge-based authentication support
 - Multi-packet response handling
-- Modern Python 3.8+ support with type hints
+- Modern Python 3.8+ support with type hints (Pydantic)
+- MCP ready
 
 ## Installation
 

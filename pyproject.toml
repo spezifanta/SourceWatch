@@ -26,6 +26,7 @@ classifiers = [
 ]
 keywords = ["source", "goldsrc", "steam", "server", "query", "valve"]
 requires-python = ">=3.8"
+dependencies = ["pydantic>=2.0.0"]
 
 [project.urls]
 Homepage = "https://github.com/SourceWatch/SourceWatch"

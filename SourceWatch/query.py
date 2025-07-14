@@ -18,6 +18,12 @@ from .packet import (
     SourceWatchError,
     create_response,
 )
+from .models import (
+    InfoResponseModel,
+    PlayersResponseModel,
+    RulesResponseModel,
+    ServerInfoModel,
+)
 
 PACKET_SIZE = 1400
 SINGLE_PACKET_RESPONSE = -1
@@ -142,7 +148,7 @@ class Query:
 
         return wrapper
 
-    def ping(self, num_requests=3):
+    def ping(self, num_requests=3) -> ServerInfoModel:
         """Fake ping request. Send three InfoRequests and calculate an average ping."""
         self.logger.info("Sending fake ping request")
 
@@ -154,19 +160,19 @@ class Query:
         return average
 
     @request
-    def info(self):
+    def info(self) -> InfoResponseModel:
         """Request basic server information."""
         self.logger.info("Sending info request")
         return self._send(InfoRequest())
 
     @request
-    def players(self):
+    def players(self) -> PlayersResponseModel:
         """Request players."""
         self.logger.info("Sending players request")
         return self._send(PlayersRequest())
 
     @request
-    def rules(self):
+    def rules(self) -> RulesResponseModel:
         """Request server rules."""
         self.logger.info("Sending rules request")
         return self._send(RulesRequest())
