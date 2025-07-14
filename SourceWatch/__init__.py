@@ -14,6 +14,7 @@ from .models import (
     RulesResponseModel,
     InfoGoldSrcResponseModel,
     PlayerModel,
+    BasicServerModel,
     ServerInfoModel,
 )
 
@@ -31,5 +32,6 @@ __all__ = [
     "RulesResponseModel",
     "InfoGoldSrcResponseModel",
     "PlayerModel",
+    "BasicServerModel",
     "ServerInfoModel",
 ]

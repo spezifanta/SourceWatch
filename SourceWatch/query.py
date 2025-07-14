@@ -22,7 +22,7 @@ from .models import (
     InfoResponseModel,
     PlayersResponseModel,
     RulesResponseModel,
-    ServerInfoModel,
+    BasicServerModel,
 )
 
 PACKET_SIZE = 1400
@@ -148,7 +148,7 @@ class Query:
 
         return wrapper
 
-    def ping(self, num_requests=3) -> ServerInfoModel:
+    def ping(self, num_requests=3) -> BasicServerModel:
         """Fake ping request. Send three InfoRequests and calculate an average ping."""
         self.logger.info("Sending fake ping request")
 

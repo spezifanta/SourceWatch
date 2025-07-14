@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel
 
 
-class ServerInfoModel(BaseModel):
+class BasicServerModel(BaseModel):
     """Server connection information."""
 
     ip: str
@@ -12,8 +12,8 @@ class ServerInfoModel(BaseModel):
     ping: float
 
 
-class InfoResponseModel(BaseModel):
-    """Server information response model."""
+class ServerInfoModel(BaseModel):
+    """Server information model."""
 
     server_protocol_version: int
     server_name: str
@@ -37,7 +37,13 @@ class InfoResponseModel(BaseModel):
     server_spectator_port: Optional[int] = None
     server_spectator_name: Optional[str] = None
     server_tags: Optional[str] = None
-    server: ServerInfoModel
+
+
+class InfoResponseModel(BaseModel):
+    """Server information response model."""
+
+    info: ServerInfoModel
+    server: BasicServerModel
 
 
 class PlayerModel(BaseModel):
@@ -54,14 +60,14 @@ class PlayersResponseModel(BaseModel):
     """Players response model."""
 
     players: List[PlayerModel]
-    server: ServerInfoModel
+    server: BasicServerModel
 
 
 class RulesResponseModel(BaseModel):
     """Server rules response model."""
 
     rules: Dict[str, str]
-    server: ServerInfoModel
+    server: BasicServerModel
 
 
 class InfoGoldSrcResponseModel(BaseModel):
@@ -83,4 +89,4 @@ class InfoGoldSrcResponseModel(BaseModel):
     players_bots: int
     players_humans: int
     players_free_slots: int
-    server: ServerInfoModel
+    server: BasicServerModel
