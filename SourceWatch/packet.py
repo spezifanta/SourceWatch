@@ -85,7 +85,7 @@ class ResponsePacket(BasePacket):
         return self._result
 
 
-class InfoRequest(RequestPacket):
+class InfoRequest(RequestPacket, Challengeable):
     REQUEST_HEADER = 0x54
     REQUEST_PAYLOAD = "Source Engine Query"
 
@@ -142,7 +142,7 @@ class InfoResponse(ResponsePacket):
         return {"info": info}
 
 
-class InfoGoldSrcResponse(ResponsePacket):
+class InfoGoldSrcResponse(ResponsePacket, Challengeable):
     RESPONSE_HEADER = 0x6D
 
     def result(self):
