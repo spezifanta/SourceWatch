@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sourcewatch"
-version = "0.0.8"
+version = "0.0.9"
 description = "A library to query information of Goldsrc and Source servers."
 readme = "README.md"
 license = { file = "LICENSE" }

@@ -7,6 +7,7 @@
 import logging
 import socket
 import time
+from typing import Dict, List, Optional, Callable, Any
 from .buffer import SteamPacketBuffer
 from .server import Server
 from .packet import (
@@ -14,6 +15,8 @@ from .packet import (
     Challengeable,
     InfoRequest,
     PlayersRequest,
+    RequestPacket,
+    ResponsePacket,
     RulesRequest,
     SourceWatchError,
     create_response,
@@ -22,7 +25,6 @@ from .models import (
     InfoResponseModel,
     PlayersResponseModel,
     RulesResponseModel,
-    BasicServerModel,
 )
 
 PACKET_SIZE = 1400
@@ -42,38 +44,39 @@ class Query:
     print(server.rules())
     """
 
-    def __init__(self, host, port=27015, timeout=10):
+    def __init__(self, host: str, port: int = 27015, timeout: int = 10) -> None:
         self.logger = logging.getLogger("SourceWatch")
         self.server = Server(socket.gethostbyname(host), port)
         self._timeout = timeout
         self._connect()
 
-    def __del__(self):
+    def __del__(self) -> None:
         self._connection.close()
 
-    def _connect(self):
+    def _connect(self) -> None:
         self.logger.info("Connecting to %s", self.server)
         self._connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._connection.settimeout(self._timeout)
         self._connection.connect(self.server.as_tuple())
 
-    def _reconnect(self):
+    def _reconnect(self) -> None:
         """Reconnect to ensure fresh connection state"""
         self._connection.close()
         self._connect()
 
-    def _receive(self, packet_buffer=None):
+    def _receive(
+        self, packet_buffer: Optional[Dict[int, List[bytes]]] = None
+    ) -> SteamPacketBuffer:
         response = self._connection.recv(PACKET_SIZE)
-        self.logger.debug("Received: %s", response)
         packet = SteamPacketBuffer(response)
         response_format = packet.read_long()
 
         if response_format == SINGLE_PACKET_RESPONSE:
-            self.logger.debug("Single packet response")
+            self.logger.debug("Got single packet response")
             return packet
 
         elif response_format == MULTIPLE_PACKET_RESPONSE:
-            self.logger.debug("Multiple packet response")
+            self.logger.debug("Got multiple packet response")
             request_id = packet.read_long()  # TODO: compressed?
 
             if packet_buffer is None:
@@ -108,12 +111,12 @@ class Query:
             self.logger.error("Received invalid response type: %s", response_format)
             raise SourceWatchError("Received invalid response type")
 
-    def _get_challenge(self):
+    def _get_challenge(self) -> int:
         response = self._send(ChallengeRequest())
         response.is_valid()
         return response.raw
 
-    def _send(self, packet):
+    def _send(self, packet: RequestPacket) -> ResponsePacket:
         if isinstance(packet, Challengeable):
             # Reconnect to ensure fresh state for challenge-based queries
             self._reconnect()
@@ -123,7 +126,6 @@ class Query:
 
         self.logger.debug("Sending packet: %s", packet)
         timer_start = time.time()
-        self.logger.debug("packet: %s", packet.as_bytes())
         self._connection.send(packet.as_bytes())
         result = self._receive()
         response_type = result.read_byte()
@@ -131,11 +133,13 @@ class Query:
         result.seek(0)
         result.read_long()
         ping = round((time.time() - timer_start) * 1000, 2)
+        response = create_response(response_type, result, ping)
+        self.logger.debug("Received package: %s", response)
 
-        return create_response(response_type, result, ping)
+        return response
 
-    def request(request):
-        def wrapper(self):
+    def request(request: Callable) -> Callable:
+        def wrapper(self: "Query") -> Optional[Dict[str, Any]]:
             response = request(self)
             result = response.result()
             if result is not None:
@@ -148,11 +152,11 @@ class Query:
 
         return wrapper
 
-    def ping(self, num_requests=3) -> BasicServerModel:
+    def ping(self, num_requests: int = 3) -> float:
         """Fake ping request. Send three InfoRequests and calculate an average ping."""
         self.logger.info("Sending fake ping request")
 
-        def fetch_ping(_):
+        def fetch_ping(_: int) -> float:
             return self.info().get("server").get("ping")
 
         total = sum(map(fetch_ping, range(num_requests)))

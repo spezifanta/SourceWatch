@@ -1,4 +1,12 @@
 import struct
+from typing import Dict, Any, Optional
+
+from SourceWatch.models import (
+    GoldSrcResponseModel,
+    PlayersResponseModel,
+    RulesResponseModel,
+    SourceInfoResponseModel,
+)
 from .buffer import SteamPacketBuffer
 
 
@@ -6,7 +14,7 @@ class SourceWatchError(Exception):
     pass
 
 
-def create_response(request_type: int, *args) -> "ResponsePacket":
+def create_response(request_type: int, *args: Any) -> "ResponsePacket":
     """Create a ResponsePacket instance from a RequestPacket class name."""
     if request_type == InfoResponse.RESPONSE_HEADER:
         ResponsePacket = InfoResponse
@@ -31,55 +39,55 @@ class Challengeable:
 
 
 class BasePacket:
-    def __init__(self):
+    def __init__(self) -> None:
         self._buffer = SteamPacketBuffer()
         self._header = None
 
     def __repr__(self):
         return f"<{self.class_name()}> buffer:{self._buffer.getvalue()}"
 
-    def class_name(self):
+    def class_name(self) -> str:
         return self.__class__.__name__
 
 
 class RequestPacket(BasePacket):
     PACKET_HEADER = -1
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._buffer.write_long(self.PACKET_HEADER)
         self._buffer.write_byte(self.REQUEST_HEADER)
         self._challenge = None
 
-    def as_bytes(self):
+    def as_bytes(self) -> bytes:
         return self._buffer.getvalue()
 
     @property
-    def challenge(self):
+    def challenge(self) -> Optional[int]:
         return self._challenge
 
     @challenge.setter
-    def challenge(self, value):
+    def challenge(self, value: int) -> None:
         self._challenge = value
         self._buffer.write_long(value)
 
 
 class ResponsePacket(BasePacket):
-    def __init__(self, buffer, ping):
+    def __init__(self, buffer: SteamPacketBuffer, ping: float) -> None:
         super().__init__()
         self._buffer = buffer
         self._ping = ping
         self._result = None
         self.header = self._buffer.read_byte()
 
-    def is_valid(self):
+    def is_valid(self) -> bool:
         return self.header == self.RESPONSE_HEADER
 
     @property
-    def ping(self):
+    def ping(self) -> float:
         return self._ping
 
-    def result(self):
+    def result(self) -> Dict[str, Any]:
         """Change stream position back to the beginning."""
         self._buffer.seek(0)
         return self._result
@@ -89,7 +97,7 @@ class InfoRequest(RequestPacket, Challengeable):
     REQUEST_HEADER = 0x54
     REQUEST_PAYLOAD = "Source Engine Query"
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._buffer.write_string(self.REQUEST_PAYLOAD)
 
@@ -97,7 +105,7 @@ class InfoRequest(RequestPacket, Challengeable):
 class InfoResponse(ResponsePacket):
     RESPONSE_HEADER = 0x49  # 0x6D  Counter-Strike 1.6
 
-    def result(self):
+    def result(self) -> SourceInfoResponseModel:
         info = {
             "server_protocol_version": self._buffer.read_byte(),
             "server_name": self._buffer.read_string(),
@@ -145,7 +153,7 @@ class InfoResponse(ResponsePacket):
 class InfoGoldSrcResponse(ResponsePacket, Challengeable):
     RESPONSE_HEADER = 0x6D
 
-    def result(self):
+    def result(self) -> GoldSrcResponseModel:
         info = {
             "server_address": self._buffer.read_string(),
             "server_name": self._buffer.read_string(),
@@ -175,7 +183,7 @@ class ChallengeRequest(RequestPacket):
     REQUEST_HEADER = 0x56
     REQUEST_CHALLENGE = -1
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.challenge = self.REQUEST_CHALLENGE
 
@@ -184,7 +192,7 @@ class ChallengeResponse(ResponsePacket):
     RESPONSE_HEADER = 0x41
 
     @property
-    def raw(self):
+    def raw(self) -> int:
         self._buffer.seek(0)
         self._buffer.read_long()
         self._buffer.read_byte()
@@ -198,7 +206,7 @@ class RulesRequest(RequestPacket, Challengeable):
 class RulesResponse(ResponsePacket):
     RESPONSE_HEADER = 0x45
 
-    def result(self):
+    def result(self) -> RulesResponseModel:
         rules = {}
         total_rules = self._buffer.read_short()
         for _ in range(total_rules):
@@ -215,7 +223,7 @@ class PlayersRequest(RequestPacket, Challengeable):
 class PlayersResponse(ResponsePacket):
     RESPONSE_HEADER = 0x44
 
-    def result(self):
+    def result(self) -> PlayersResponseModel:
         total_players = self._buffer.read_byte()
         players = []
         for i in range(total_players):

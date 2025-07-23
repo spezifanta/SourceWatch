@@ -3,6 +3,7 @@ from .server import Server
 from .buffer import SteamPacketBuffer
 from .packet import (
     InfoRequest,
+    InfoResponse,
     PlayersRequest,
     PlayersResponse,
     RulesRequest,
@@ -12,26 +13,21 @@ from .models import (
     InfoResponseModel,
     PlayersResponseModel,
     RulesResponseModel,
-    InfoGoldSrcResponseModel,
-    PlayerModel,
     BasicServerModel,
-    ServerInfoModel,
 )
 
 __all__ = [
     "Query",
     "Server",
     "SteamPacketBuffer",
+    "BasicServerModel",
     "InfoRequest",
+    "InfoResponse",
+    "InfoResponseModel",
     "PlayersRequest",
     "PlayersResponse",
+    "PlayersResponseModel",
     "RulesRequest",
     "RulesResponse",
-    "InfoResponseModel",
-    "PlayersResponseModel",
     "RulesResponseModel",
-    "InfoGoldSrcResponseModel",
-    "PlayerModel",
-    "BasicServerModel",
-    "ServerInfoModel",
 ]

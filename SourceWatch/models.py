@@ -12,8 +12,8 @@ class BasicServerModel(BaseModel):
     ping: float
 
 
-class ServerInfoModel(BaseModel):
-    """Server information model."""
+class SourceInfoResponseModel(BaseModel):
+    """Source information model."""
 
     server_protocol_version: int
     server_name: str
@@ -39,10 +39,31 @@ class ServerInfoModel(BaseModel):
     server_tags: Optional[str] = None
 
 
+class GoldSrcResponseModel(BaseModel):
+    """GoldSrc server information response model."""
+
+    server_address: str
+    server_name: str
+    game_map: str
+    game_directory: str
+    game_title: str
+    players_current: int
+    players_max_slots: int
+    server_protocol_version: int
+    server_type: str
+    server_os: str
+    server_password_protected: int
+    game_mod: int
+    server_vac_secured: int
+    players_bots: int
+    players_humans: int
+    players_free_slots: int
+
+
 class InfoResponseModel(BaseModel):
     """Server information response model."""
 
-    info: ServerInfoModel
+    info: SourceInfoResponseModel | GoldSrcResponseModel
     server: BasicServerModel
 
 
